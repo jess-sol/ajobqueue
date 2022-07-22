@@ -1,9 +1,11 @@
-use std::{error::Error, marker::PhantomData};
+use std::{sync::Arc, error::Error, marker::PhantomData};
 use std::fmt::{self, Debug};
 
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::{Serialize, Deserialize};
+
+use tokio::sync::Mutex;
 
 #[async_trait]
 pub trait Executor: Send + Sync {
@@ -36,38 +38,65 @@ impl fmt::Display for JobRunError {
 
 impl Error for JobRunError {}
 
-pub struct Queue {
+pub struct Queue<J: Job + ?Sized> {
+    _phantom_type: PhantomData<J>,
+    storage_provider: Box<dyn StorageProvider<Job=J>>,
+}
 
+impl<J: Job + ?Sized> Queue<J> {
+    fn new(storage_provider: Box<dyn StorageProvider<Job=J>>) -> Self {
+        Queue {
+            _phantom_type: PhantomData,
+            storage_provider,
+        }
+    }
+
+    async fn push_job(&mut self, job: Box<J>) -> Result<(), ()> {
+        self.storage_provider.create_job(job).await.unwrap();
+        Ok(())
+    }
 }
 
 struct InMemoryStorageProvider<J: Job + ?Sized> {
     // jobs: Vec<Box<<Self as StorageProvider>::Job>>,
-    jobs: Vec<String>,
+    jobs: Arc<Mutex<Vec<String>>>,
     _phantom_type: PhantomData<J>
+}
+
+impl<J: Job + ?Sized> Clone for InMemoryStorageProvider<J> {
+    fn clone(&self) -> Self {
+        Self {
+            jobs: self.jobs.clone(),
+            _phantom_type: PhantomData,
+        }
+    }
 }
 
 impl<J: Job + ?Sized> InMemoryStorageProvider<J> {
     fn new() -> Self {
-        InMemoryStorageProvider { jobs: Vec::with_capacity(10), _phantom_type: PhantomData }
+        InMemoryStorageProvider {
+            jobs: Arc::new(Mutex::new(Vec::with_capacity(10))),
+            _phantom_type: PhantomData
+        }
     }
 }
 
 
 #[async_trait]
-// TODO - Only alternative until GATs or similar is GA
+// TODO - Generic phantom type only alternative until GATs or similar is GA
 impl<J: Job + Debug + Serialize + ?Sized> StorageProvider for InMemoryStorageProvider<J>
     where Box<J>: DeserializeOwned
 {
     type Job = J;
     async fn get_job(&mut self) -> Result<Box<Self::Job>, JobRunError> {
-        let serialized_job = self.jobs.pop().unwrap();
+        let serialized_job = self.jobs.lock().await.pop().unwrap();
         let job: Box<Self::Job> = serde_json::from_str(&serialized_job).unwrap();
         Ok(job)
     }
 
     async fn create_job(&mut self, job: Box<Self::Job>) -> Result<(), JobRunError> {
         let serialized_job = serde_json::to_string(&job).unwrap();
-        self.jobs.push(serialized_job);
+        self.jobs.lock().await.push(serialized_job);
         Ok(())
     }
 
@@ -96,12 +125,12 @@ impl Executor for MockExecutor {
 
 #[async_trait]
 #[typetag::serde(tag = "type")]
-trait MockExecutorJob: Job<Executor=MockExecutor> + Sync + Send { }
+trait MockExecutorJob: Job<Executor=MockExecutor> { }
 // }}}
 
 // Job {{{
 // #[job(MockExecutor)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct MockJob {
     msg: String,
 }
@@ -123,7 +152,7 @@ impl Job for MockJob {
 #[cfg(test)]
 mod tests {
     use super::Executor;
-    use super::StorageProvider;
+    use super::Queue;
 
     use super::MockJob;
     use super::MockExecutor;
@@ -132,10 +161,11 @@ mod tests {
 
     #[tokio::test]
     async fn it_works() {
-        let mut storage_provider = InMemoryStorageProvider::<dyn MockExecutorJob>::new();
+        let storage_provider = InMemoryStorageProvider::<dyn MockExecutorJob>::new();
+        let mut queue = Queue::new(Box::new(storage_provider.clone()));
 
         let job = MockJob { msg: "world!".to_string() };
-        storage_provider.create_job(Box::new(job)).await.unwrap();
+        queue.push_job(Box::new(job)).await.unwrap();
 
         let mut executor = MockExecutor {
             storage_provider: Box::new(storage_provider),
