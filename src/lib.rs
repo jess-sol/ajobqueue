@@ -12,7 +12,7 @@ pub use executor::Executor;
 pub use storage::StorageProvider;
 
 #[async_trait]
-pub trait Job: erased_serde::Serialize + Debug + Sync + Send {
+pub trait Job: Debug + Sync + Send {
     type JobTypeData: Any;
     async fn run(&self, job_data: &Self::JobTypeData);
 }
