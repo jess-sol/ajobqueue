@@ -2,7 +2,7 @@ use std::error::Error;
 
 use async_trait::async_trait;
 
-use crate::{Job, error::JobRunError};
+use crate::{error::JobRunError, Job};
 
 pub use in_memory::InMemoryStorageProvider;
 
@@ -13,12 +13,15 @@ pub trait StorageProvider: Send + Sync {
     type Job: Job + ?Sized;
     async fn create_job(&mut self, job: Box<Self::Job>) -> Result<(), JobRunError>;
     async fn get_job(&mut self) -> Result<Box<Self::Job>, JobRunError>;
-    async fn set_job_result(&mut self, result: Result<(), Box<dyn Error+Sync+Send>>) -> Result<(), JobRunError>;
+    async fn set_job_result(
+        &mut self,
+        result: Result<(), Box<dyn Error + Sync + Send>>,
+    ) -> Result<(), JobRunError>;
 }
 
 mod in_memory {
-    use std::{sync::Arc, error::Error, marker::PhantomData};
     use std::fmt::Debug;
+    use std::{error::Error, marker::PhantomData, sync::Arc};
 
     use async_trait::async_trait;
     use serde::de::DeserializeOwned;
@@ -27,12 +30,12 @@ mod in_memory {
     use tokio::sync::Mutex;
 
     use super::StorageProvider;
-    use crate::{Job, error::JobRunError};
+    use crate::{error::JobRunError, Job};
 
     pub struct InMemoryStorageProvider<J: Job + ?Sized> {
         // jobs: Vec<Box<<Self as StorageProvider>::Job>>,
         jobs: Arc<Mutex<Vec<String>>>,
-        _phantom_type: PhantomData<J>
+        _phantom_type: PhantomData<J>,
     }
 
     impl<J: Job + ?Sized> Clone for InMemoryStorageProvider<J> {
@@ -48,16 +51,16 @@ mod in_memory {
         pub fn new() -> Self {
             InMemoryStorageProvider {
                 jobs: Arc::new(Mutex::new(Vec::with_capacity(10))),
-                _phantom_type: PhantomData
+                _phantom_type: PhantomData,
             }
         }
     }
 
-
     #[async_trait]
     // TODO - Generic phantom type only alternative until GATs or similar is GA
     impl<J: Job + Debug + Serialize + ?Sized> StorageProvider for InMemoryStorageProvider<J>
-        where Box<J>: DeserializeOwned
+    where
+        Box<J>: DeserializeOwned,
     {
         type Job = J;
         async fn get_job(&mut self) -> Result<Box<Self::Job>, JobRunError> {
@@ -72,7 +75,10 @@ mod in_memory {
             Ok(())
         }
 
-        async fn set_job_result(&mut self, _result: Result<(), Box<dyn Error+Sync+Send>>) -> Result<(), JobRunError> {
+        async fn set_job_result(
+            &mut self,
+            _result: Result<(), Box<dyn Error + Sync + Send>>,
+        ) -> Result<(), JobRunError> {
             Err(JobRunError {})
         }
     }

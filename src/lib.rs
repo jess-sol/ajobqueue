@@ -1,6 +1,6 @@
 use std::any::Any;
-use std::marker::PhantomData;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 
 use async_trait::async_trait;
 
@@ -19,11 +19,11 @@ pub trait Job: erased_serde::Serialize + Debug + Sync + Send {
 
 pub struct Queue<J: Job + ?Sized> {
     _phantom_type: PhantomData<J>,
-    storage_provider: Box<dyn StorageProvider<Job=J>>,
+    storage_provider: Box<dyn StorageProvider<Job = J>>,
 }
 
 impl<J: Job + ?Sized> Queue<J> {
-    fn new(storage_provider: Box<dyn StorageProvider<Job=J>>) -> Self {
+    fn new(storage_provider: Box<dyn StorageProvider<Job = J>>) -> Self {
         Queue {
             _phantom_type: PhantomData,
             storage_provider,
@@ -38,10 +38,9 @@ impl<J: Job + ?Sized> Queue<J> {
 
 #[cfg(test)]
 mod tests {
+    use crate::{storage::InMemoryStorageProvider, Executor, Job, Queue};
     use async_trait::async_trait;
-    use crate::{Executor, Job, Queue, storage::InMemoryStorageProvider};
-    use serde::{Serialize, Deserialize};
-
+    use serde::{Deserialize, Serialize};
 
     // JobType macro {{{
     // #[job_type]
@@ -51,7 +50,7 @@ mod tests {
 
     #[async_trait]
     #[typetag::serde(tag = "type")]
-    trait MockJobType: Job<JobTypeData=MockJobTypeData> { }
+    trait MockJobType: Job<JobTypeData = MockJobTypeData> {}
     // }}}
 
     // Job {{{
@@ -62,7 +61,7 @@ mod tests {
     }
 
     #[typetag::serde]
-    impl MockJobType for MockJob { }
+    impl MockJobType for MockJob {}
 
     #[async_trait]
     impl Job for MockJob {
@@ -74,7 +73,6 @@ mod tests {
     }
     // }}}
 
-
     // JobType macro {{{
     // #[job_type]
     struct OtherJobTypeData {
@@ -83,7 +81,7 @@ mod tests {
 
     #[async_trait]
     #[typetag::serde(tag = "type")]
-    trait OtherJobType: Job<JobTypeData=OtherJobTypeData> { }
+    trait OtherJobType: Job<JobTypeData = OtherJobTypeData> {}
     // }}}
 
     // Job {{{
@@ -94,7 +92,7 @@ mod tests {
     }
 
     #[typetag::serde]
-    impl OtherJobType for OtherJob { }
+    impl OtherJobType for OtherJob {}
 
     #[async_trait]
     impl Job for OtherJob {
@@ -106,18 +104,22 @@ mod tests {
     }
     // }}}
 
-
     #[tokio::test]
     async fn it_works() {
         let storage_provider = InMemoryStorageProvider::<dyn MockJobType>::new();
         let mut queue = Queue::new(Box::new(storage_provider.clone()));
 
-        let job = MockJob { msg: "world!".to_string() };
+        let job = MockJob {
+            msg: "world!".to_string(),
+        };
         queue.push_job(Box::new(job)).await.unwrap();
 
-        let mut executor = Executor::new(Box::new(storage_provider), MockJobTypeData {
-            data_msg_type: "Hello".to_string()
-        });
+        let mut executor = Executor::new(
+            Box::new(storage_provider),
+            MockJobTypeData {
+                data_msg_type: "Hello".to_string(),
+            },
+        );
 
         executor.start().await;
     }

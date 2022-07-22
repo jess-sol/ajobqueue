@@ -1,4 +1,4 @@
-use std::{fmt, error::Error};
+use std::{error::Error, fmt};
 
 #[derive(Debug)]
 pub struct JobRunError {}
@@ -10,4 +10,3 @@ impl fmt::Display for JobRunError {
 }
 
 impl Error for JobRunError {}
-
