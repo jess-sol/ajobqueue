@@ -20,7 +20,6 @@ pub trait StorageProvider: Send + Sync {
 }
 
 mod in_memory {
-    use std::fmt::Debug;
     use std::{error::Error, marker::PhantomData, sync::Arc};
 
     use async_trait::async_trait;
@@ -58,9 +57,9 @@ mod in_memory {
 
     #[async_trait]
     // TODO - Generic phantom type only alternative until GATs or similar is GA
-    impl<J: Job + Debug + Serialize + ?Sized> StorageProvider for InMemoryStorageProvider<J>
+    impl<J: Job + ?Sized> StorageProvider for InMemoryStorageProvider<J>
     where
-        Box<J>: DeserializeOwned,
+        Box<J>: Serialize + DeserializeOwned,
     {
         type Job = J;
         async fn get_job(&mut self) -> Result<Box<Self::Job>, JobRunError> {
