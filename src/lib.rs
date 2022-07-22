@@ -18,18 +18,18 @@ pub trait Job: Sync + Send {
 
 pub struct Queue<J: Job + ?Sized> {
     _phantom_type: PhantomData<J>,
-    storage_provider: Box<dyn StorageProvider<Job = J>>,
+    storage_provider: Box<dyn StorageProvider<J>>,
 }
 
 impl<J: Job + ?Sized> Queue<J> {
-    fn new(storage_provider: Box<dyn StorageProvider<Job = J>>) -> Self {
+    fn new(storage_provider: Box<dyn StorageProvider<J>>) -> Self {
         Queue {
             _phantom_type: PhantomData,
             storage_provider,
         }
     }
 
-    async fn push_job(&mut self, job: Box<J>) -> Result<(), ()> {
+    async fn push_job(&mut self, job: &J) -> Result<(), ()> {
         self.storage_provider.create_job(job).await.unwrap();
         Ok(())
     }
@@ -37,7 +37,7 @@ impl<J: Job + ?Sized> Queue<J> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{storage::InMemoryStorageProvider, Executor, Job, Queue};
+    use crate::{storage::InMemoryStorageProvider, Executor, Job, Queue, StorageProvider};
     use async_trait::async_trait;
 
     use ajobqueue_macro::{job, job_type};
@@ -84,13 +84,13 @@ mod tests {
 
     #[tokio::test]
     async fn it_works() {
-        let storage_provider = InMemoryStorageProvider::new();
+        let storage_provider = InMemoryStorageProvider::<dyn MockJobTypeMarker>::new();
         let mut queue = Queue::new(Box::new(storage_provider.clone()));
 
         let job = MockJob {
             msg: "world!".to_string(),
         };
-        queue.push_job(Box::new(job)).await.unwrap();
+        queue.push_job(&job).await.unwrap();
 
         let mut executor = Executor::new(
             Box::new(storage_provider),

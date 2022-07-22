@@ -40,7 +40,7 @@ mod job_type_macro {
         let expanded = quote! {
             #visibility struct #name #fields
 
-            #[typetag::serde(tag="type")]
+            #[::typetag::serde(tag="type")]
             trait #trait_name: Job<JobTypeData=#name> {}
         };
 
