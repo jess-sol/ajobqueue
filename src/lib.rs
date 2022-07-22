@@ -1,50 +1,21 @@
 use std::any::Any;
-use std::{sync::Arc, error::Error, marker::PhantomData};
-use std::fmt::{self, Debug};
+use std::marker::PhantomData;
+use std::fmt::Debug;
 
 use async_trait::async_trait;
-use serde::de::DeserializeOwned;
-use serde::{Serialize, Deserialize};
 
-use tokio::sync::Mutex;
+mod error;
+mod executor;
+mod storage;
 
-pub struct Executor<J: Job + ?Sized> {
-    job_type_data: J::JobTypeData,
-    storage_provider: Box<dyn StorageProvider<Job=J>>,
-}
-
-impl<J: Job + ?Sized> Executor<J> {
-    async fn start(&mut self) {
-        let job: Box<J> = self.storage_provider.get_job().await.unwrap();
-        Job::run(&*job, &self.job_type_data).await;
-    }
-}
+pub use executor::Executor;
+pub use storage::StorageProvider;
 
 #[async_trait]
 pub trait Job: erased_serde::Serialize + Debug + Sync + Send {
     type JobTypeData: Any;
     async fn run(&self, job_data: &Self::JobTypeData);
 }
-
-#[async_trait]
-pub trait StorageProvider: Send + Sync {
-    type Job: Job + ?Sized;
-    async fn create_job(&mut self, job: Box<Self::Job>) -> Result<(), JobRunError>;
-    async fn get_job(&mut self) -> Result<Box<Self::Job>, JobRunError>;
-    async fn set_job_result(&mut self, result: Result<(), Box<dyn Error+Sync+Send>>) -> Result<(), JobRunError>;
-}
-
-
-#[derive(Debug)]
-pub struct JobRunError {}
-
-impl fmt::Display for JobRunError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl Error for JobRunError {}
 
 pub struct Queue<J: Job + ?Sized> {
     _phantom_type: PhantomData<J>,
@@ -65,95 +36,76 @@ impl<J: Job + ?Sized> Queue<J> {
     }
 }
 
-struct InMemoryStorageProvider<J: Job + ?Sized> {
-    // jobs: Vec<Box<<Self as StorageProvider>::Job>>,
-    jobs: Arc<Mutex<Vec<String>>>,
-    _phantom_type: PhantomData<J>
-}
-
-impl<J: Job + ?Sized> Clone for InMemoryStorageProvider<J> {
-    fn clone(&self) -> Self {
-        Self {
-            jobs: self.jobs.clone(),
-            _phantom_type: PhantomData,
-        }
-    }
-}
-
-impl<J: Job + ?Sized> InMemoryStorageProvider<J> {
-    fn new() -> Self {
-        InMemoryStorageProvider {
-            jobs: Arc::new(Mutex::new(Vec::with_capacity(10))),
-            _phantom_type: PhantomData
-        }
-    }
-}
-
-
-#[async_trait]
-// TODO - Generic phantom type only alternative until GATs or similar is GA
-impl<J: Job + Debug + Serialize + ?Sized> StorageProvider for InMemoryStorageProvider<J>
-    where Box<J>: DeserializeOwned
-{
-    type Job = J;
-    async fn get_job(&mut self) -> Result<Box<Self::Job>, JobRunError> {
-        let serialized_job = self.jobs.lock().await.pop().unwrap();
-        let job: Box<Self::Job> = serde_json::from_str(&serialized_job).unwrap();
-        Ok(job)
-    }
-
-    async fn create_job(&mut self, job: Box<Self::Job>) -> Result<(), JobRunError> {
-        let serialized_job = serde_json::to_string(&job).unwrap();
-        self.jobs.lock().await.push(serialized_job);
-        Ok(())
-    }
-
-    async fn set_job_result(&mut self, _result: Result<(), Box<dyn Error+Sync+Send>>) -> Result<(), JobRunError> {
-        Err(JobRunError {})
-    }
-}
-
-// JobType macro {{{
-// #[job_type]
-struct MockJobTypeData {
-    data_msg_type: String,
-}
-
-#[async_trait]
-#[typetag::serde(tag = "type")]
-trait MockJobType: Job<JobTypeData=MockJobTypeData> { }
-// }}}
-
-// Job {{{
-// #[job(MockJobType)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct MockJob {
-    msg: String,
-}
-
-#[typetag::serde]
-impl MockJobType for MockJob { }
-
-#[async_trait]
-impl Job for MockJob {
-    type JobTypeData = MockJobTypeData;
-
-    async fn run(&self, job_data: &Self::JobTypeData) {
-        println!("MSG: {}, {}", job_data.data_msg_type, self.msg);
-    }
-}
-// }}}
-
-
 #[cfg(test)]
 mod tests {
-    use super::Executor;
-    use super::Queue;
+    use async_trait::async_trait;
+    use crate::{Executor, Job, Queue, storage::InMemoryStorageProvider};
+    use serde::{Serialize, Deserialize};
 
-    use super::MockJob;
-    use super::MockJobTypeData;
-    use super::MockJobType;
-    use super::InMemoryStorageProvider;
+
+    // JobType macro {{{
+    // #[job_type]
+    struct MockJobTypeData {
+        data_msg_type: String,
+    }
+
+    #[async_trait]
+    #[typetag::serde(tag = "type")]
+    trait MockJobType: Job<JobTypeData=MockJobTypeData> { }
+    // }}}
+
+    // Job {{{
+    // #[job(MockJobType)]
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    struct MockJob {
+        msg: String,
+    }
+
+    #[typetag::serde]
+    impl MockJobType for MockJob { }
+
+    #[async_trait]
+    impl Job for MockJob {
+        type JobTypeData = MockJobTypeData;
+
+        async fn run(&self, job_data: &Self::JobTypeData) {
+            println!("MSG: {}, {}", job_data.data_msg_type, self.msg);
+        }
+    }
+    // }}}
+
+
+    // JobType macro {{{
+    // #[job_type]
+    struct OtherJobTypeData {
+        data_msg_type: String,
+    }
+
+    #[async_trait]
+    #[typetag::serde(tag = "type")]
+    trait OtherJobType: Job<JobTypeData=OtherJobTypeData> { }
+    // }}}
+
+    // Job {{{
+    // #[job(OtherJobType)]
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    struct OtherJob {
+        msg: String,
+    }
+
+    #[typetag::serde]
+    impl OtherJobType for OtherJob { }
+
+    #[async_trait]
+    impl Job for OtherJob {
+        type JobTypeData = OtherJobTypeData;
+
+        async fn run(&self, job_data: &Self::JobTypeData) {
+            println!("MSG: {}, {}", job_data.data_msg_type, self.msg);
+        }
+    }
+    // }}}
+
 
     #[tokio::test]
     async fn it_works() {
@@ -163,12 +115,10 @@ mod tests {
         let job = MockJob { msg: "world!".to_string() };
         queue.push_job(Box::new(job)).await.unwrap();
 
-        let mut executor = Executor {
-            storage_provider: Box::new(storage_provider),
-            job_type_data: MockJobTypeData {
-                data_msg_type: "Hello".to_string(),
-            }
-        };
+        let mut executor = Executor::new(Box::new(storage_provider), MockJobTypeData {
+            data_msg_type: "Hello".to_string()
+        });
+
         executor.start().await;
     }
 }
