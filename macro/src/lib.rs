@@ -2,18 +2,26 @@ use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput, Error};
 
 #[proc_macro_attribute]
-pub fn executor(attr: TokenStream, item: TokenStream) -> TokenStream {
-    println!("attr: \"{}\"", attr);
-    println!("item: \"{}\"", item);
-
+pub fn job_type(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
 
-    ExecutorMacro::expand(input)
+    job_type_macro::expand(input)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }
 
-mod ExecutorMacro {
+#[proc_macro_attribute]
+pub fn job(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    let attrs = parse_macro_input!(attr as job_macro::JobAttrs);
+
+    job_macro::expand(attrs, input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
+
+mod job_type_macro {
     use proc_macro2::TokenStream;
     use quote::{quote, format_ident};
     use syn::{Data, DeriveInput, Result};
@@ -21,7 +29,7 @@ mod ExecutorMacro {
     pub(crate) fn expand(input: DeriveInput) -> Result<TokenStream> {
         let visibility = input.vis;
         let name = input.ident;
-        let modname = format_ident!("{}Impl", name);
+        let trait_name = format_ident!("{}Marker", name);
 
         let fields = if let Data::Struct(x) = input.data {
             x.fields
@@ -31,50 +39,51 @@ mod ExecutorMacro {
 
         let expanded = quote! {
             #visibility struct #name #fields
-            #[allow(non_snake_case)]
-            mod #modname {
-                use super::#name;
-                use super::MsgJobFamily; // TODO
-                use crate::{Job, Executor};
-                use linkme::distributed_slice;
 
-                type JobFamily = MsgJobFamily; // TODO
-
-                #[distributed_slice]
-                pub(super) static JOBS: [fn() -> Box<dyn Job<JobFamily=JobFamily>>] = [..];
-
-                // impl Executor for #name {
-                //     type JobFamily = JobFamily;
-
-                //     fn new(worker_data: Self::JobFamily) -> Self {
-                //         // let x = JOBS;
-                //         // println!("HIDER: {}", ty!(JOBS));
-                //         // println!("HIDER: {:?}", JOBS!());
-                //         Self { worker_data }
-                //     }
-
-                //     fn worker_data(&self) -> &Self::JobFamily {
-                //         &self.worker_data
-                //     }
-                // }
-            }
+            #[typetag::serde(tag="type")]
+            trait #trait_name: Job<JobTypeData=#name> {}
         };
-
-        println!("HIDER: {}", expanded);
 
         Ok(expanded)
     }
-
-    fn expand_distributed_slice_enum(input: TokenStream) -> Result<TokenStream> {
-        Ok(input)
-    }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+mod job_macro {
+    use proc_macro2::{TokenStream, Ident};
+    use quote::{quote, format_ident};
+    use syn::{Data, DeriveInput, Result, parse::Parse};
+
+    pub struct JobAttrs {
+        pub name: Ident,
+    }
+
+    impl Parse for JobAttrs {
+        fn parse(input: syn::parse::ParseStream) -> Result<Self> {
+            let name: Ident = input.parse()?;
+            Ok(JobAttrs { name })
+        }
+    }
+
+    pub(crate) fn expand(attrs: JobAttrs, input: DeriveInput) -> Result<TokenStream> {
+        let visibility = input.vis;
+        let name = input.ident;
+
+        let job_trait_name = format_ident!("{}Marker", attrs.name);
+
+        let fields = if let Data::Struct(x) = input.data {
+            x.fields
+        } else {
+            return Err(syn::Error::new(name.span(), "Invalid type, must be struct"));
+        };
+
+        let expanded = quote! {
+            #[derive(Clone, Debug, ::serde::Serialize, ::serde::Deserialize)]
+            #visibility struct #name #fields
+
+            #[::typetag::serde]
+            impl #job_trait_name for #name {}
+        };
+
+        Ok(expanded)
     }
 }
