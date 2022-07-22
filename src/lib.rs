@@ -1,207 +1,146 @@
-use std::{error::Error, any::Any};
+use std::{error::Error, marker::PhantomData};
+use std::fmt::{self, Debug};
 
 use async_trait::async_trait;
-use serde::{Serialize, Deserialize, de::DeserializeOwned};
-use erased_serde::{Serializer, Deserializer};
+use serde::de::DeserializeOwned;
+use serde::{Serialize, Deserialize};
 
-pub trait JobFamily {
-    // String representation of JobFamily. Must be unique across all JobFamily's used with a single
-    // `Storage` backend.
-    fn job_family_name() -> String;
-}
-
-pub trait Executor where Self: Sync {
-    type JobFamily: JobFamily;
-
-    fn new(worker_data: Self::JobFamily) -> Self where Self: Sized;
-    fn worker_data(&self) -> &Self::JobFamily;
-}
-
-pub trait Storage {
-    fn create_job<J: Job + Serialize>(&mut self, job: &J) -> Result<(), ()>;
-    fn get_job<'a, J: Job + DeserializeOwned>(&self) -> Result<(), ()>;
-    fn set_job_result<JF: JobFamily>(&mut self, result: Result<(), Box<dyn Error>>) -> Result<(), ()>;
+#[async_trait]
+pub trait Executor: Send + Sync {
+    async fn start(&mut self);
 }
 
 #[async_trait]
-pub trait Job where Self: Sync + erased_serde::Serialize {
-    type JobFamily: Any + Send;
-
-    async fn run(&self, executor: &dyn Executor<JobFamily=Self::JobFamily>) -> Result<(), Box<dyn Error>>;
+pub trait Job: erased_serde::Serialize + Debug + Sync + Send {
+    type Executor: Executor;
+    async fn run(&self, executor: &Self::Executor);
 }
 
-pub struct JobQueue<E: Executor> {
-    executor: E,
+#[async_trait]
+pub trait StorageProvider: Send + Sync {
+    type Job: Job + ?Sized;
+    async fn create_job(&mut self, job: Box<Self::Job>) -> Result<(), JobRunError>;
+    async fn get_job(&mut self) -> Result<Box<Self::Job>, JobRunError>;
+    async fn set_job_result(&mut self, result: Result<(), Box<dyn Error+Sync+Send>>) -> Result<(), JobRunError>;
 }
 
-impl<E: Executor> JobQueue<E> {
-    pub fn new(executor: E) -> Self {
-        Self {
-            executor
-        }
+
+#[derive(Debug)]
+pub struct JobRunError {}
+
+impl fmt::Display for JobRunError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
-
-    // pub async fn start() {
-    // }
 }
 
+impl Error for JobRunError {}
 
-// InMemoryStorage start
-use std::collections::HashMap;
+pub struct Queue {
 
-struct InMemoryStorage {
-    jobs: HashMap<String, Vec<Vec<u8>>>,
 }
 
-impl InMemoryStorage {
+struct InMemoryStorageProvider<J: Job + ?Sized> {
+    // jobs: Vec<Box<<Self as StorageProvider>::Job>>,
+    jobs: Vec<String>,
+    _phantom_type: PhantomData<J>
+}
+
+impl<J: Job + ?Sized> InMemoryStorageProvider<J> {
     fn new() -> Self {
-        InMemoryStorage {
-            jobs: HashMap::new(),
-        }
-    }
-}
-
-impl Storage for InMemoryStorage {
-    fn create_job<J: Job + Serialize>(&mut self, job: &J) -> Result<(), ()> {
-        let mut output = Vec::with_capacity(128);
-        let json = &mut serde_json::Serializer::new(&mut output);
-        let mut z = Box::new(<dyn Serializer>::erase(json));
-        job.erased_serialize(&mut *z).unwrap();
-
-        self.jobs
-            .entry("test".to_owned())
-            // .entry(<J as Job>::JobFamily::job_family_name())
-            .or_insert(Vec::new())
-            .push(output);
-
-        // println!("HIDER: {:?}", output);
-
-        // let json = &mut serde_json::Deserializer::from_slice(&output);
-        // let json = Box::new(<dyn Deserializer>::erase(json));
-        // let data: J = erased_serde::deserialize(&mut *json).unwrap();
-        Ok(())
-    }
-
-    fn get_job<'a, J: Job + DeserializeOwned>(&self) -> Result<(), ()> {
-        Ok(())
-    }
-
-    fn set_job_result<JF: JobFamily>(&mut self, result: Result<(), Box<dyn Error>>) -> Result<(), ()> {
-        Ok(())
+        InMemoryStorageProvider { jobs: Vec::with_capacity(10), _phantom_type: PhantomData }
     }
 }
 
 
-// InMemoryStorage end
+#[async_trait]
+// TODO - Only alternative until GATs or similar is GA
+impl<J: Job + Debug + Serialize + ?Sized> StorageProvider for InMemoryStorageProvider<J>
+    where Box<J>: DeserializeOwned
+{
+    type Job = J;
+    async fn get_job(&mut self) -> Result<Box<Self::Job>, JobRunError> {
+        let serialized_job = self.jobs.pop().unwrap();
+        let job: Box<Self::Job> = serde_json::from_str(&serialized_job).unwrap();
+        Ok(job)
+    }
+
+    async fn create_job(&mut self, job: Box<Self::Job>) -> Result<(), JobRunError> {
+        let serialized_job = serde_json::to_string(&job).unwrap();
+        self.jobs.push(serialized_job);
+        Ok(())
+    }
+
+    async fn set_job_result(&mut self, result: Result<(), Box<dyn Error+Sync+Send>>) -> Result<(), JobRunError> {
+        Err(JobRunError {})
+    }
+}
+
+
+// Executor macro {{{
+// #[executor]
+struct MockExecutor {
+    // TODO - Monomorphize storage_provider? Removes vtable lookup
+    storage_provider: Box<dyn StorageProvider<Job=dyn MockExecutorJob>>,
+    data_msg_type: String,
+}
+
+// TODO - Manual monomorphization with macro?
+#[async_trait]
+impl Executor for MockExecutor {
+    async fn start(&mut self) {
+        let job: Box<dyn MockExecutorJob> = self.storage_provider.get_job().await.unwrap();
+        Job::run(&*job, self).await;
+    }
+}
+
+#[async_trait]
+#[typetag::serde(tag = "type")]
+trait MockExecutorJob: Job<Executor=MockExecutor> + Sync + Send { }
+// }}}
+
+// Job {{{
+// #[job(MockExecutor)]
+#[derive(Debug, Serialize, Deserialize)]
+struct MockJob {
+    msg: String,
+}
+
+#[typetag::serde]
+impl MockExecutorJob for MockJob { }
+
+#[async_trait]
+impl Job for MockJob {
+    type Executor = MockExecutor;
+
+    async fn run(&self, executor: &Self::Executor) {
+        println!("MSG: {}, {}", executor.data_msg_type, self.msg);
+    }
+}
+// }}}
+
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
-    use async_trait::async_trait;
-    use linkme::distributed_slice;
+    use super::Executor;
+    use super::StorageProvider;
 
-    use crate::InMemoryStorage;
-
-    use super::{JobFamily, Job, Executor, Storage};
-
-    use ajobqueue_macro::executor;
-
-    macro_rules! ty {($type:ty) => {std::any::type_name::<$type>()}}
-
-    struct MsgJobFamily {
-        msg: String,
-    }
-
-    impl JobFamily for MsgJobFamily {
-        fn job_family_name() -> String {
-            String::from("msg")
-        }
-    }
-
-    #[executor]
-    struct MockExecutor {
-        worker_data: MsgJobFamily,
-    }
-
-    impl Executor for MockExecutor {
-        type JobFamily = MsgJobFamily;
-
-        fn new(worker_data: Self::JobFamily) -> Self where Self: Sized {
-            Self { worker_data }
-        }
-        fn worker_data(&self) -> &Self::JobFamily {
-            &self.worker_data
-        }
-    }
-
-    // Executor macro
-    // #[ajobqueue::executor]
-    // impl Executor for MockExecutor { .. }
-    // use MockExecutorImpl::MockExecutor;
-    // #[allow(non_snake_case)]
-    // mod MockExecutorImpl {
-    //     // TODO - Use ajobqueue instead of crate
-    //     use crate::{Job, Executor};
-    //     use linkme::distributed_slice;
-
-    //     type JobFamily = super::MsgJobFamily;
-
-    //     #[distributed_slice]
-    //     pub(super) static JOBS: [fn() -> Box<dyn Job<JobFamily=JobFamily>>] = [..];
-
-    //     pub(super) struct MockExecutor {
-    //         pub(super) worker_data: JobFamily,
-    //     }
-
-    //     impl Executor for MockExecutor {
-    //         type JobFamily = JobFamily;
-
-    //         fn new(worker_data: Self::JobFamily) -> Self {
-    //             let x = JOBS;
-    //             println!("HIDER: {}", ty!(JOBS));
-    //             // println!("HIDER: {:?}", JOBS!());
-    //             Self { worker_data }
-    //         }
-
-    //         fn worker_data(&self) -> &Self::JobFamily {
-    //             &self.worker_data
-    //         }
-    //     }
-    // }
-    // End executor macro
-
-    // Job macro
-    #[derive(serde::Serialize)]
-    struct MockJob {}
-
-    #[distributed_slice(MockExecutorImpl::JOBS)]
-    fn mock_job_generator() -> Box<dyn Job<JobFamily=MsgJobFamily>> {
-        Box::new(MockJob {})
-    }
-
-    // #[ajobqueue::job]
-    // impl Job for MockJob { .. }
-    #[async_trait]
-    impl Job for MockJob {
-        type JobFamily = MsgJobFamily;
-        async fn run(&self, executor: &dyn Executor<JobFamily=Self::JobFamily>) -> Result<(), Box<dyn Error>> {
-            println!("Msg: {}", executor.worker_data().msg);
-            Ok(())
-        }
-    }
-    // End job macro
+    use super::MockJob;
+    use super::MockExecutor;
+    use super::MockExecutorJob;
+    use super::InMemoryStorageProvider;
 
     #[tokio::test]
     async fn it_works() {
-        let executor = MockExecutor::new(MsgJobFamily { msg: "test".to_owned() });
-        let job = MockJob {};
+        let mut storage_provider = InMemoryStorageProvider::<dyn MockExecutorJob>::new();
 
-        job.run(&executor as _).await.unwrap();
-    }
+        let job = MockJob { msg: "world!".to_string() };
+        storage_provider.create_job(Box::new(job)).await.unwrap();
 
-    #[tokio::test]
-    async fn test_memory_storage() {
-        let mut storage = InMemoryStorage::new();
-        storage.create_job(&MockJob {}).unwrap();
+        let mut executor = MockExecutor {
+            storage_provider: Box::new(storage_provider),
+            data_msg_type: "Hello".to_string(),
+        };
+        executor.start().await;
     }
 }
