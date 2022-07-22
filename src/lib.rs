@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use async_trait::async_trait;
@@ -12,7 +11,7 @@ pub use executor::Executor;
 pub use storage::StorageProvider;
 
 #[async_trait]
-pub trait Job: Debug + Sync + Send {
+pub trait Job: Sync + Send {
     type JobTypeData: Any;
     async fn run(&self, job_data: &Self::JobTypeData);
 }
