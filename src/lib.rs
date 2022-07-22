@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::{sync::Arc, error::Error, marker::PhantomData};
 use std::fmt::{self, Debug};
 
@@ -7,15 +8,22 @@ use serde::{Serialize, Deserialize};
 
 use tokio::sync::Mutex;
 
-#[async_trait]
-pub trait Executor: Send + Sync {
-    async fn start(&mut self);
+pub struct Executor<J: Job + ?Sized> {
+    job_type_data: J::JobTypeData,
+    storage_provider: Box<dyn StorageProvider<Job=J>>,
+}
+
+impl<J: Job + ?Sized> Executor<J> {
+    async fn start(&mut self) {
+        let job: Box<J> = self.storage_provider.get_job().await.unwrap();
+        Job::run(&*job, &self.job_type_data).await;
+    }
 }
 
 #[async_trait]
 pub trait Job: erased_serde::Serialize + Debug + Sync + Send {
-    type Executor: Executor;
-    async fn run(&self, executor: &Self::Executor);
+    type JobTypeData: Any;
+    async fn run(&self, job_data: &Self::JobTypeData);
 }
 
 #[async_trait]
@@ -100,50 +108,38 @@ impl<J: Job + Debug + Serialize + ?Sized> StorageProvider for InMemoryStoragePro
         Ok(())
     }
 
-    async fn set_job_result(&mut self, result: Result<(), Box<dyn Error+Sync+Send>>) -> Result<(), JobRunError> {
+    async fn set_job_result(&mut self, _result: Result<(), Box<dyn Error+Sync+Send>>) -> Result<(), JobRunError> {
         Err(JobRunError {})
     }
 }
 
-
-// Executor macro {{{
-// #[executor]
-struct MockExecutor {
-    // TODO - Monomorphize storage_provider? Removes vtable lookup
-    storage_provider: Box<dyn StorageProvider<Job=dyn MockExecutorJob>>,
+// JobType macro {{{
+// #[job_type]
+struct MockJobTypeData {
     data_msg_type: String,
-}
-
-// TODO - Manual monomorphization with macro?
-#[async_trait]
-impl Executor for MockExecutor {
-    async fn start(&mut self) {
-        let job: Box<dyn MockExecutorJob> = self.storage_provider.get_job().await.unwrap();
-        Job::run(&*job, self).await;
-    }
 }
 
 #[async_trait]
 #[typetag::serde(tag = "type")]
-trait MockExecutorJob: Job<Executor=MockExecutor> { }
+trait MockJobType: Job<JobTypeData=MockJobTypeData> { }
 // }}}
 
 // Job {{{
-// #[job(MockExecutor)]
+// #[job(MockJobType)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct MockJob {
     msg: String,
 }
 
 #[typetag::serde]
-impl MockExecutorJob for MockJob { }
+impl MockJobType for MockJob { }
 
 #[async_trait]
 impl Job for MockJob {
-    type Executor = MockExecutor;
+    type JobTypeData = MockJobTypeData;
 
-    async fn run(&self, executor: &Self::Executor) {
-        println!("MSG: {}, {}", executor.data_msg_type, self.msg);
+    async fn run(&self, job_data: &Self::JobTypeData) {
+        println!("MSG: {}, {}", job_data.data_msg_type, self.msg);
     }
 }
 // }}}
@@ -155,21 +151,23 @@ mod tests {
     use super::Queue;
 
     use super::MockJob;
-    use super::MockExecutor;
-    use super::MockExecutorJob;
+    use super::MockJobTypeData;
+    use super::MockJobType;
     use super::InMemoryStorageProvider;
 
     #[tokio::test]
     async fn it_works() {
-        let storage_provider = InMemoryStorageProvider::<dyn MockExecutorJob>::new();
+        let storage_provider = InMemoryStorageProvider::<dyn MockJobType>::new();
         let mut queue = Queue::new(Box::new(storage_provider.clone()));
 
         let job = MockJob { msg: "world!".to_string() };
         queue.push_job(Box::new(job)).await.unwrap();
 
-        let mut executor = MockExecutor {
+        let mut executor = Executor {
             storage_provider: Box::new(storage_provider),
-            data_msg_type: "Hello".to_string(),
+            job_type_data: MockJobTypeData {
+                data_msg_type: "Hello".to_string(),
+            }
         };
         executor.start().await;
     }
