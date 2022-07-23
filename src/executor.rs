@@ -1,3 +1,5 @@
+use crate::error::ExecutionError;
+
 use super::Job;
 use super::StorageProvider;
 
@@ -65,10 +67,11 @@ pub struct RunningExecutor {
 }
 
 impl RunningExecutor {
-    pub async fn stop(self) {
+    pub async fn stop(self) -> Result<(), ExecutionError> {
         self.broadcast_channel
             .send(BroadcastMessage::Shutdown)
-            .unwrap();
-        self.task_handle.await.unwrap();
+            .map_err(|x| ExecutionError::SignalingError(Box::new(x)))?;
+        self.task_handle.await.map_err(ExecutionError::JoinError)?;
+        Ok(())
     }
 }

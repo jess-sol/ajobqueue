@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::marker::PhantomData;
 
 use async_trait::async_trait;
@@ -7,6 +6,7 @@ mod error;
 mod executor;
 mod storage;
 
+use error::AJobQueueError;
 pub use executor::Executor;
 pub use storage::StorageProvider;
 
@@ -29,8 +29,8 @@ impl<J: Job + ?Sized> Queue<J> {
         }
     }
 
-    pub async fn push_job(&mut self, job: &J) -> Result<(), ()> {
-        self.storage_provider.create_job(job).await.unwrap();
+    pub async fn push_job(&mut self, job: &J) -> Result<(), AJobQueueError> {
+        self.storage_provider.create_job(job).await?;
         Ok(())
     }
 }
@@ -102,6 +102,6 @@ mod tests {
         let executor = executor.start().await;
 
         tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
-        executor.stop().await;
+        executor.stop().await.unwrap();
     }
 }
