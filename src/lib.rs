@@ -12,7 +12,7 @@ pub use storage::StorageProvider;
 
 #[async_trait]
 pub trait Job: Sync + Send {
-    type JobTypeData: Any;
+    type JobTypeData: Sync + Send;
     async fn run(&self, job_data: &Self::JobTypeData);
 }
 
@@ -99,6 +99,9 @@ mod tests {
             },
         );
 
-        executor.start().await;
+        let executor = executor.start().await;
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+        executor.stop().await;
     }
 }

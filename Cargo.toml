@@ -9,10 +9,10 @@ name = "ajobqueue"
 [dependencies]
 ajobqueue-macro = { path = "macro" }
 
+async-channel = "1.6.1"
 async-trait = "0.1.56"
 erased-serde = "0.3.21"
-linkme = "0.3.1"
 serde = { version = "1.0.140", features = ["derive"] }
 serde_json = "1.0.82"
-tokio = { version = "1.20.0", features = ["rt", "macros", "sync"] }
+tokio = { version = "1.20.0", features = ["rt", "macros", "sync", "time", "rt-multi-thread"] }
 typetag = "0.2.1"
