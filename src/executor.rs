@@ -16,13 +16,13 @@ pub struct Executor<J: Job + ?Sized> {
 }
 
 impl<J: Job + ?Sized + 'static> Executor<J> {
-    pub fn new(
-        storage_provider: Box<dyn StorageProvider<J>>,
+    pub fn new<S: StorageProvider<J> + 'static>(
+        storage_provider: S,
         job_type_data: J::JobTypeData,
     ) -> Self {
         Self {
             job_type_data,
-            storage_provider,
+            storage_provider: Box::new(storage_provider),
         }
     }
 

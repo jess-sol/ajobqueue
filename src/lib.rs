@@ -22,14 +22,14 @@ pub struct Queue<J: Job + ?Sized> {
 }
 
 impl<J: Job + ?Sized> Queue<J> {
-    fn new(storage_provider: Box<dyn StorageProvider<J>>) -> Self {
+    pub fn new<S: StorageProvider<J> + 'static>(storage_provider: S) -> Self {
         Queue {
             _phantom_type: PhantomData,
-            storage_provider,
+            storage_provider: Box::new(storage_provider),
         }
     }
 
-    async fn push_job(&mut self, job: &J) -> Result<(), ()> {
+    pub async fn push_job(&mut self, job: &J) -> Result<(), ()> {
         self.storage_provider.create_job(job).await.unwrap();
         Ok(())
     }
@@ -84,16 +84,16 @@ mod tests {
 
     #[tokio::test]
     async fn it_works() {
-        let storage_provider = InMemoryStorageProvider::<dyn MockJobTypeMarker>::new();
-        let mut queue = Queue::new(Box::new(storage_provider.clone()));
+        let storage_provider = InMemoryStorageProvider::new();
+        let mut queue = Queue::new(storage_provider.clone());
 
         let job = MockJob {
             msg: "world!".to_string(),
         };
         queue.push_job(&job).await.unwrap();
 
-        let mut executor = Executor::new(
-            Box::new(storage_provider),
+        let executor = Executor::new(
+            storage_provider,
             MockJobType {
                 data_msg_type: "Hello".to_string(),
             },
