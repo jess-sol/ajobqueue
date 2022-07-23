@@ -23,8 +23,8 @@ mod in_memory {
     use std::{error::Error, sync::Arc};
 
     use async_trait::async_trait;
-    use serde::{de::DeserializeOwned, Deserialize};
     use serde::Serialize;
+    use serde::de::DeserializeOwned;
 
     use tokio::sync::Mutex;
 
@@ -34,7 +34,7 @@ mod in_memory {
     // PhantomData necessary so struct only impls one generic impl of StorageProvider
     pub struct InMemoryStorageProvider<J: ?Sized> {
         jobs: Arc<Mutex<Vec<String>>>,
-        _phantom_data: PhantomData<J>
+        _phantom_data: PhantomData<J>,
     }
 
     impl<J: ?Sized> Clone for InMemoryStorageProvider<J> {
