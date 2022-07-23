@@ -8,6 +8,9 @@ use crate::{
 
 mod in_memory;
 
+#[cfg(feature="postgres")]
+mod postgres;
+
 pub use in_memory::InMemoryStorageProvider;
 
 pub enum JobState {

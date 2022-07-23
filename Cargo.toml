@@ -6,6 +6,9 @@ edition = "2021"
 [lib]
 name = "ajobqueue"
 
+[features]
+postgres = []
+
 [dependencies]
 ajobqueue-macro = { path = "macro" }
 
