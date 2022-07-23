@@ -18,7 +18,8 @@ impl<J: Job + ?Sized> Executor<J> {
     }
 
     pub async fn start(&mut self) {
-        let job: Box<J> = self.storage_provider.get_job().await.unwrap();
-        Job::run(&*job, &self.job_type_data).await;
+        while let Ok(job) = self.storage_provider.get_job().await {
+            Job::run(&*job, &self.job_type_data).await;
+        }
     }
 }

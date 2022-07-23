@@ -62,7 +62,7 @@ mod in_memory {
         for<'a> &'a J: Serialize,
     {
         async fn get_job(&mut self) -> Result<Box<J>, JobRunError> {
-            let serialized_job = self.jobs.lock().await.pop().unwrap();
+            let serialized_job = self.jobs.lock().await.pop().ok_or(JobRunError {})?;
             let job: Box<J> = serde_json::from_str(&serialized_job).unwrap();
             Ok(job)
         }
