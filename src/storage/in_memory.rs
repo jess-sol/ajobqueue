@@ -1,10 +1,10 @@
-use std::marker::PhantomData;
 use std::error::Error;
+use std::marker::PhantomData;
 
-use async_trait::async_trait;
 use async_channel::{unbounded, Receiver, Sender};
-use serde::Serialize;
+use async_trait::async_trait;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use super::StorageProvider;
 use crate::{error::JobRunError, Job};
@@ -47,7 +47,8 @@ where
 
     async fn create_job(&mut self, job: &J) -> Result<(), JobRunError> {
         let serialized_job = serde_json::to_string(&job).unwrap();
-        self.jobs.0.send(serialized_job).await.map_err(|_| JobRunError {})?;
+        self.jobs.0.send(serialized_job).await
+            .map_err(|_| JobRunError {})?;
         Ok(())
     }
 

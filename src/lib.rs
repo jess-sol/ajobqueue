@@ -37,7 +37,7 @@ impl<J: Job + ?Sized> Queue<J> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{storage::InMemoryStorageProvider, Executor, Job, Queue, StorageProvider};
+    use crate::{storage::InMemoryStorageProvider, Executor, Job, Queue};
     use async_trait::async_trait;
 
     use ajobqueue_macro::{job, job_type};

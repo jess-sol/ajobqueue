@@ -3,7 +3,7 @@ use super::StorageProvider;
 
 use tokio::select;
 use tokio::task::JoinHandle;
-use tokio::{task, sync::broadcast};
+use tokio::{sync::broadcast, task};
 
 #[derive(Clone, Debug)]
 enum BroadcastMessage {
@@ -27,7 +27,7 @@ impl<J: Job + ?Sized + 'static> Executor<J> {
     }
 
     pub async fn start(self) -> RunningExecutor {
-        let (sender, mut receiver) = broadcast::channel(1);
+        let (sender, receiver) = broadcast::channel(1);
 
         let join = task::spawn(async move {
             select! {
@@ -47,7 +47,6 @@ impl<J: Job + ?Sized + 'static> Executor<J> {
             Job::run(&*job, &self.job_type_data).await;
         }
     }
-
 }
 
 async fn manage_signals(mut receiver: broadcast::Receiver<BroadcastMessage>) {
@@ -55,7 +54,7 @@ async fn manage_signals(mut receiver: broadcast::Receiver<BroadcastMessage>) {
         match receiver.recv().await {
             Ok(BroadcastMessage::Shutdown) => break,
             Err(broadcast::error::RecvError::Closed) => break,
-            Err(broadcast::error::RecvError::Lagged(_)) => {},
+            Err(broadcast::error::RecvError::Lagged(_)) => {}
         }
     }
 }
@@ -67,7 +66,9 @@ pub struct RunningExecutor {
 
 impl RunningExecutor {
     pub async fn stop(self) {
-        self.broadcast_channel.send(BroadcastMessage::Shutdown).unwrap();
+        self.broadcast_channel
+            .send(BroadcastMessage::Shutdown)
+            .unwrap();
         self.task_handle.await.unwrap();
     }
 }
