@@ -12,8 +12,22 @@ pub use storage::StorageProvider;
 
 #[async_trait]
 pub trait Job: Sync + Send {
-    type JobTypeData: Sync + Send;
+    type JobTypeData: JobType;
     async fn run(&self, job_data: &Self::JobTypeData);
+}
+
+pub trait JobType: Send + Sync {
+    fn job_type() -> String;
+}
+
+impl<J: ?Sized, T> JobType for J
+where
+    J: Job<JobTypeData = T>,
+    T: JobType,
+{
+    fn job_type() -> String {
+        T::job_type()
+    }
 }
 
 pub struct Queue<J: Job + ?Sized> {
@@ -37,7 +51,7 @@ impl<J: Job + ?Sized> Queue<J> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{storage::InMemoryStorageProvider, Executor, Job, Queue};
+    use crate::{storage::InMemoryStorageProvider, Executor, Job, JobType, Queue};
     use async_trait::async_trait;
 
     use ajobqueue_macro::{job, job_type};

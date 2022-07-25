@@ -31,6 +31,9 @@ mod job_type_macro {
         let name = input.ident;
         let trait_name = format_ident!("{}Marker", name);
 
+        // TODO - Make configurable with attr
+        let job_type_str = name.to_string();
+
         let fields = if let Data::Struct(x) = input.data {
             x.fields
         } else {
@@ -39,6 +42,12 @@ mod job_type_macro {
 
         let expanded = quote! {
             #visibility struct #name #fields
+
+            impl JobType for #name {
+                fn job_type() -> String {
+                    String::from(#job_type_str)
+                }
+            }
 
             #[::typetag::serde(tag="type")]
             trait #trait_name: Job<JobTypeData=#name> {}
