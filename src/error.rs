@@ -1,4 +1,4 @@
-use std::{error::Error as StdError, fmt};
+use std::error::Error as StdError;
 
 use thiserror::Error;
 use tokio::task::JoinError;

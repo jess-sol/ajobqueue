@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use async_trait::async_trait;
 
 mod error;
@@ -16,6 +14,8 @@ pub trait Job: Sync + Send {
     async fn run(&self, job_data: &Self::JobTypeData);
 }
 
+pub trait JobTypeMarker: Job {}
+
 pub trait JobType: Send + Sync {
     fn job_type() -> String;
 }
@@ -30,15 +30,13 @@ where
     }
 }
 
-pub struct Queue<J: Job + ?Sized> {
-    _phantom_type: PhantomData<J>,
+pub struct Queue<J: JobTypeMarker + ?Sized> {
     storage_provider: Box<dyn StorageProvider<J>>,
 }
 
-impl<J: Job + ?Sized> Queue<J> {
+impl<J: JobTypeMarker + ?Sized> Queue<J> {
     pub fn new<S: StorageProvider<J> + 'static>(storage_provider: S) -> Self {
         Queue {
-            _phantom_type: PhantomData,
             storage_provider: Box::new(storage_provider),
         }
     }
@@ -112,7 +110,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_works() {
-        let storage_provider = InMemoryStorageProvider::new();
+        let storage_provider = InMemoryStorageProvider::<dyn MockJobTypeMarker>::new();
         let mut queue = Queue::new(storage_provider.clone());
 
         queue.push_job(&MockJob { msg: "world!".to_string() }).await.unwrap();

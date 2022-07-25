@@ -51,6 +51,8 @@ mod job_type_macro {
 
             #[::typetag::serde(tag="type")]
             trait #trait_name: Job<JobTypeData=#name> {}
+
+            impl crate::JobTypeMarker for dyn #trait_name<JobTypeData=#name> {}
         };
 
         Ok(expanded)

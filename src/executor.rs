@@ -1,3 +1,4 @@
+use crate::JobTypeMarker;
 use crate::error::ExecutionError;
 
 use super::Job;
@@ -12,12 +13,14 @@ enum BroadcastMessage {
     Shutdown,
 }
 
-pub struct Executor<J: Job + ?Sized> {
+pub struct Executor<J: JobTypeMarker + ?Sized>
+{
     job_type_data: J::JobTypeData,
     storage_provider: Box<dyn StorageProvider<J>>,
 }
 
-impl<J: Job + ?Sized + 'static> Executor<J> {
+impl<J: JobTypeMarker + ?Sized + 'static> Executor<J>
+{
     pub fn new<S: StorageProvider<J> + 'static>(
         storage_provider: S,
         job_type_data: J::JobTypeData,

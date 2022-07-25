@@ -8,7 +8,7 @@ use serde::Serialize;
 use super::StorageProvider;
 use crate::{
     error::{JobRunError, StorageError},
-    Job,
+    JobTypeMarker,
 };
 
 // PhantomData necessary so struct only impls one generic impl of StorageProvider
@@ -36,7 +36,7 @@ impl<J: ?Sized> InMemoryStorageProvider<J> {
 }
 
 #[async_trait]
-impl<J: Job + ?Sized> StorageProvider<J> for InMemoryStorageProvider<J>
+impl<J: JobTypeMarker + ?Sized> StorageProvider<J> for InMemoryStorageProvider<J>
 where
     Box<J>: DeserializeOwned,
     for<'a> &'a J: Serialize,
