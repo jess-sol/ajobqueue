@@ -76,6 +76,20 @@ mod tests {
         }
     }
 
+    #[job(MockJobType)]
+    struct MockJob2 {
+        msg: String,
+    }
+
+    #[async_trait]
+    impl Job for MockJob2 {
+        type JobTypeData = MockJobType;
+
+        async fn run(&self, job_data: &Self::JobTypeData) {
+            println!("MSG@: {}, {}", job_data.data_msg_type, self.msg);
+        }
+    }
+
     // Job type 2
     #[job_type]
     struct OtherJobType {
@@ -101,10 +115,8 @@ mod tests {
         let storage_provider = InMemoryStorageProvider::new();
         let mut queue = Queue::new(storage_provider.clone());
 
-        let job = MockJob {
-            msg: "world!".to_string(),
-        };
-        queue.push_job(&job).await.unwrap();
+        queue.push_job(&MockJob { msg: "world!".to_string() }).await.unwrap();
+        queue.push_job(&MockJob2 { msg: "world!".to_string() }).await.unwrap();
 
         let executor = Executor::new(
             storage_provider,
