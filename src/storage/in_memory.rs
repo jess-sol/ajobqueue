@@ -3,8 +3,9 @@ use std::marker::PhantomData;
 use async_channel::{unbounded, Receiver, Sender};
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
+use ulid::Ulid;
 
-use super::StorageProvider;
+use super::{StorageProvider, JobMetadata, JobState};
 use crate::{
     error::{JobRunError, StorageError},
     JobTypeMarker,
@@ -45,11 +46,15 @@ where Box<J>: DeserializeOwned
         Ok(job)
     }
 
-    async fn push(&mut self, job: &J) -> Result<(), StorageError> {
+    async fn push(&mut self, job: &J) -> Result<JobMetadata, StorageError> {
         let serialized_job = serde_json::to_string(&job)?;
         self.jobs.0.send(serialized_job).await
             .map_err(|x| StorageError::CreateFailure(Box::new(x)))?;
-        Ok(())
+        Ok(JobMetadata {
+            uid: Ulid::new(),
+            state: JobState::NotStarted,
+            result: None,
+        })
     }
 
     async fn set_job_result(
