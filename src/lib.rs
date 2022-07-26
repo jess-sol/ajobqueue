@@ -56,6 +56,8 @@ impl<J: JobTypeMarker + ?Sized> Queue<J> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
     use crate::{job, job_type, storage::InMemoryStorageProvider, Executor, Job, Queue};
     use async_trait::async_trait;
 
@@ -63,6 +65,7 @@ mod tests {
     #[job_type]
     struct MockJobType {
         data_msg_type: String,
+        shared_data: Arc<Mutex<Vec<String>>>,
     }
 
     #[job(MockJobType)]
@@ -75,7 +78,8 @@ mod tests {
         type JobTypeData = MockJobType;
 
         async fn run(&self, job_data: &Self::JobTypeData) {
-            println!("MSG: {}, {}", job_data.data_msg_type, self.msg);
+            let msg = format!("MSG: {}, {}", job_data.data_msg_type, self.msg);
+            job_data.shared_data.lock().await.push(msg);
         }
     }
 
@@ -89,15 +93,14 @@ mod tests {
         type JobTypeData = MockJobType;
 
         async fn run(&self, job_data: &Self::JobTypeData) {
-            println!("MSG@: {}, {}", job_data.data_msg_type, self.msg);
+            let msg = format!("MSG2: {}, {}", job_data.data_msg_type, self.msg);
+            job_data.shared_data.lock().await.push(msg);
         }
     }
 
     // Job type 2
     #[job_type]
-    struct OtherJobType {
-        data_msg_type: String,
-    }
+    struct OtherJobType {}
 
     #[job(OtherJobType)]
     struct OtherJob {
@@ -107,10 +110,7 @@ mod tests {
     #[async_trait]
     impl Job for OtherJob {
         type JobTypeData = OtherJobType;
-
-        async fn run(&self, job_data: &Self::JobTypeData) {
-            println!("MSG: {}, {}", job_data.data_msg_type, self.msg);
-        }
+        async fn run(&self, _: &Self::JobTypeData) {}
     }
 
     #[tokio::test]
@@ -121,10 +121,13 @@ mod tests {
         queue.push_job(&MockJob { msg: "world!".to_string() }).await.unwrap();
         queue.push_job(&MockJob2 { msg: "world!".to_string() }).await.unwrap();
 
+        let shared_data = Arc::new(Mutex::new(Vec::new()));
+
         let executor = Executor::new(
             storage_provider,
             MockJobType {
                 data_msg_type: "Hello".to_string(),
+                shared_data: shared_data.clone(),
             },
         );
 
@@ -132,5 +135,10 @@ mod tests {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
         executor.stop().await.unwrap();
+
+        assert_eq!(*shared_data.lock().await, vec![
+            "MSG: Hello, world!",
+            "MSG2: Hello, world!"
+        ]);
     }
 }
