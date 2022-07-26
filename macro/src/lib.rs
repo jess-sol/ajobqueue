@@ -43,16 +43,16 @@ mod job_type_macro {
         let expanded = quote! {
             #visibility struct #name #fields
 
-            impl JobType for #name {
+            impl ::ajobqueue::JobType for #name {
                 fn job_type() -> String {
                     String::from(#job_type_str)
                 }
             }
 
             #[::typetag::serde(tag="type")]
-            trait #trait_name: Job<JobTypeData=#name> {}
+            trait #trait_name: ::ajobqueue::Job<JobTypeData=#name> {}
 
-            impl crate::JobTypeMarker for dyn #trait_name<JobTypeData=#name> {}
+            impl ::ajobqueue::JobTypeMarker for dyn #trait_name<JobTypeData=#name> {}
         };
 
         Ok(expanded)

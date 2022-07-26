@@ -1,3 +1,5 @@
+extern crate self as ajobqueue;
+
 use async_trait::async_trait;
 
 mod error;
@@ -5,8 +7,10 @@ mod executor;
 mod storage;
 
 use error::AJobQueueError;
-pub use executor::Executor;
 use serde::Serialize;
+
+pub use ajobqueue_macro::{job, job_type};
+pub use executor::Executor;
 pub use storage::StorageProvider;
 
 #[async_trait]
@@ -50,10 +54,8 @@ impl<J: JobTypeMarker + ?Sized> Queue<J> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{storage::InMemoryStorageProvider, Executor, Job, JobType, Queue};
+    use crate::{job, job_type, storage::InMemoryStorageProvider, Executor, Job, Queue};
     use async_trait::async_trait;
-
-    use ajobqueue_macro::{job, job_type};
 
     // Job type 1
     #[job_type]
