@@ -38,14 +38,14 @@ impl<J: JobTypeMarker + ?Sized> InMemoryStorageProvider<J> {
 impl<J: JobTypeMarker + ?Sized> StorageProvider<J> for InMemoryStorageProvider<J>
 where Box<J>: DeserializeOwned
 {
-    async fn get_job(&mut self) -> Result<Box<J>, StorageError> {
+    async fn pull(&mut self) -> Result<Box<J>, StorageError> {
         let serialized_job = self.jobs.1.recv().await
             .map_err(|x| StorageError::FetchFailure(Box::new(x)))?;
         let job: Box<J> = serde_json::from_str(&serialized_job)?;
         Ok(job)
     }
 
-    async fn create_job(&mut self, job: &J) -> Result<(), StorageError> {
+    async fn push(&mut self, job: &J) -> Result<(), StorageError> {
         let serialized_job = serde_json::to_string(&job)?;
         self.jobs.0.send(serialized_job).await
             .map_err(|x| StorageError::CreateFailure(Box::new(x)))?;

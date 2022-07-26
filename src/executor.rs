@@ -48,7 +48,7 @@ impl<J: JobTypeMarker + ?Sized + 'static> Executor<J>
     }
 
     async fn run(mut self) {
-        while let Ok(job) = self.storage_provider.get_job().await {
+        while let Ok(job) = self.storage_provider.pull().await {
             Job::run(&*job, &self.job_type_data).await;
         }
     }

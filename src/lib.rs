@@ -43,7 +43,7 @@ impl<J: JobTypeMarker + ?Sized> Queue<J> {
     }
 
     pub async fn push_job(&mut self, job: &J) -> Result<(), AJobQueueError> {
-        self.storage_provider.create_job(job).await?;
+        self.storage_provider.push(job).await?;
         Ok(())
     }
 }
