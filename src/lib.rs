@@ -1,5 +1,7 @@
 extern crate self as ajobqueue;
 
+use std::fmt::Debug;
+
 use async_trait::async_trait;
 
 mod error;
@@ -14,7 +16,7 @@ pub use executor::Executor;
 pub use storage::StorageProvider;
 
 #[async_trait]
-pub trait Job: Sync + Send {
+pub trait Job: Sync + Send + Debug {
     type JobTypeData: JobType;
     async fn run(&self, job_data: &Self::JobTypeData);
 }
