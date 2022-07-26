@@ -52,7 +52,9 @@ mod job_type_macro {
             }
 
             #[::typetag::serde(tag="type")]
-            trait #trait_name: ::ajobqueue::Job<JobTypeData=#name> {}
+            trait #trait_name: ::ajobqueue::Job<JobTypeData=#name> {
+                fn into_any(self: Box<Self>) -> Box<dyn ::std::any::Any>;
+            }
 
             impl ::ajobqueue::JobTypeMarker for dyn #trait_name<JobTypeData=#name> {}
         };
@@ -96,7 +98,11 @@ mod job_macro {
             #visibility struct #name #fields
 
             #[::typetag::serde]
-            impl #job_trait_name for #name {}
+            impl #job_trait_name for #name {
+                fn into_any(self: Box<Self>) -> Box<dyn ::std::any::Any> {
+                    self
+                }
+            }
         };
 
         Ok(expanded)
