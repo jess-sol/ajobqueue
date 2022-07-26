@@ -13,6 +13,10 @@ mod postgres;
 
 pub use in_memory::InMemoryStorageProvider;
 
+#[derive(Debug)]
+#[cfg_attr(feature = "postgres", derive(sqlx::Type))]
+#[cfg_attr(feature = "postgres", sqlx(type_name = "job_state"))]
+#[cfg_attr(feature = "postgres", sqlx(rename_all = "kebab-case"))]
 pub enum JobState {
     NotStarted,
     Running,

@@ -1,5 +1,6 @@
 use std::error::Error as StdError;
 
+use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use tokio::task::JoinError;
 
@@ -39,8 +40,10 @@ pub enum StorageError {
     UnspecifiedError(#[source] Box<dyn StdError + Send>),
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Serialize, Deserialize)]
 pub enum JobRunError {
     #[error("Task failure")]
-    TaskFailure(#[source] Box<dyn StdError + Send>),
+    TaskFailure {
+        msg: String,
+    },
 }
