@@ -30,6 +30,7 @@ mod job_type_macro {
         let visibility = input.vis;
         let name = input.ident;
         let trait_name = format_ident!("{}Marker", name);
+        let attrs = input.attrs;
 
         // TODO - Make configurable with attr
         let job_type_str = name.to_string();
@@ -41,6 +42,7 @@ mod job_type_macro {
         };
 
         let expanded = quote! {
+            #(#attrs)*
             #visibility struct #name #fields
 
             impl ::ajobqueue::JobType for #name {
@@ -78,6 +80,7 @@ mod job_macro {
     pub(crate) fn expand(attrs: JobAttrs, input: DeriveInput) -> Result<TokenStream> {
         let visibility = input.vis;
         let name = input.ident;
+        let sattrs = input.attrs;
 
         let job_trait_name = format_ident!("{}Marker", attrs.name);
 
@@ -88,6 +91,7 @@ mod job_macro {
         };
 
         let expanded = quote! {
+            #(#sattrs)*
             #[derive(Clone, Debug, ::serde::Serialize, ::serde::Deserialize)]
             #visibility struct #name #fields
 
