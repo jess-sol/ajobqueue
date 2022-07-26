@@ -6,6 +6,7 @@ mod storage;
 
 use error::AJobQueueError;
 pub use executor::Executor;
+use serde::Serialize;
 pub use storage::StorageProvider;
 
 #[async_trait]
@@ -14,7 +15,7 @@ pub trait Job: Sync + Send {
     async fn run(&self, job_data: &Self::JobTypeData);
 }
 
-pub trait JobTypeMarker: Job {}
+pub trait JobTypeMarker: Job + Serialize {}
 
 pub trait JobType: Send + Sync {
     fn job_type() -> String;

@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 use async_channel::{unbounded, Receiver, Sender};
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
-use serde::Serialize;
 
 use super::StorageProvider;
 use crate::{
@@ -12,12 +11,12 @@ use crate::{
 };
 
 // PhantomData necessary so struct only impls one generic impl of StorageProvider
-pub struct InMemoryStorageProvider<J: ?Sized> {
+pub struct InMemoryStorageProvider<J: JobTypeMarker + ?Sized> {
     jobs: (Sender<String>, Receiver<String>),
     _phantom_data: PhantomData<J>,
 }
 
-impl<J: ?Sized> Clone for InMemoryStorageProvider<J> {
+impl<J: JobTypeMarker + ?Sized> Clone for InMemoryStorageProvider<J> {
     fn clone(&self) -> Self {
         Self {
             jobs: self.jobs.clone(),
@@ -26,7 +25,7 @@ impl<J: ?Sized> Clone for InMemoryStorageProvider<J> {
     }
 }
 
-impl<J: ?Sized> InMemoryStorageProvider<J> {
+impl<J: JobTypeMarker + ?Sized> InMemoryStorageProvider<J> {
     pub fn new() -> Self {
         InMemoryStorageProvider {
             jobs: unbounded(),
@@ -37,9 +36,7 @@ impl<J: ?Sized> InMemoryStorageProvider<J> {
 
 #[async_trait]
 impl<J: JobTypeMarker + ?Sized> StorageProvider<J> for InMemoryStorageProvider<J>
-where
-    Box<J>: DeserializeOwned,
-    for<'a> &'a J: Serialize,
+where Box<J>: DeserializeOwned
 {
     async fn get_job(&mut self) -> Result<Box<J>, StorageError> {
         let serialized_job = self.jobs.1.recv().await
