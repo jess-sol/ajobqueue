@@ -9,7 +9,7 @@ use crate::{
 mod in_memory;
 
 #[cfg(feature="postgres")]
-mod postgres;
+pub mod postgres;
 
 pub use in_memory::InMemoryStorageProvider;
 

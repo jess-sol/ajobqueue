@@ -20,6 +20,31 @@ pub fn job(attr: TokenStream, item: TokenStream) -> TokenStream {
         .into()
 }
 
+// Re-export typetag macros
+use quote::format_ident;
+use typetag_impl::{Mode, expand, get_crate_path};
+
+#[proc_macro_attribute]
+pub fn serde(args: TokenStream, input: TokenStream) -> TokenStream {
+    let mut crate_path = get_crate_path("ajobqueue");
+    crate_path.segments.push(format_ident!("typetag").into());
+    expand(args, input, Mode::new(true, true), &crate_path)
+}
+
+#[proc_macro_attribute]
+pub fn serialize(args: TokenStream, input: TokenStream) -> TokenStream {
+    let mut crate_path = get_crate_path("ajobqueue");
+    crate_path.segments.push(format_ident!("typetag").into());
+    expand(args, input, Mode::new(true, false), &crate_path)
+}
+
+#[proc_macro_attribute]
+pub fn deserialize(args: TokenStream, input: TokenStream) -> TokenStream {
+    let mut crate_path = get_crate_path("ajobqueue");
+    crate_path.segments.push(format_ident!("typetag").into());
+    expand(args, input, Mode::new(false, true), &crate_path)
+}
+
 
 mod job_type_macro {
     use proc_macro2::TokenStream;
@@ -51,8 +76,8 @@ mod job_type_macro {
                 }
             }
 
-            #[::typetag::serde(tag="type")]
-            trait #trait_name: ::ajobqueue::Job<JobTypeData=#name> {
+            #[::ajobqueue::serde(tag="type")]
+            #visibility trait #trait_name: ::ajobqueue::Job<JobTypeData=#name> {
                 fn into_any(self: Box<Self>) -> Box<dyn ::std::any::Any>;
             }
 
@@ -94,10 +119,10 @@ mod job_macro {
 
         let expanded = quote! {
             #(#sattrs)*
-            #[derive(Clone, Debug, ::serde::Serialize, ::serde::Deserialize)]
+            #[derive(Clone, Debug, ::ajobqueue::typetag::serde::Serialize, ::ajobqueue::typetag::serde::Deserialize)]
             #visibility struct #name #fields
 
-            #[::typetag::serde]
+            #[::ajobqueue::serde]
             impl #job_trait_name for #name {
                 fn into_any(self: Box<Self>) -> Box<dyn ::std::any::Any> {
                     self

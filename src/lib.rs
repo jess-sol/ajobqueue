@@ -3,17 +3,19 @@ extern crate self as ajobqueue;
 use std::fmt::Debug;
 
 use async_trait::async_trait;
+use serde::Serialize;
 
 mod error;
 mod executor;
-mod storage;
+pub mod storage;
 
-use error::AJobQueueError;
-use serde::Serialize;
-
-pub use ajobqueue_macro::{job, job_type};
+pub use ajobqueue_macro::*;
+pub use error::AJobQueueError;
 pub use executor::Executor;
 pub use storage::StorageProvider;
+
+#[doc(hidden)]
+pub use typetag;
 
 #[async_trait]
 pub trait Job: Sync + Send + Debug {
