@@ -41,7 +41,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
- "typetag-impl",
+ "typetag-impl 0.2.1",
 ]
 
 [[package]]
@@ -1285,12 +1285,13 @@ checksum = "dcf81ac59edc17cc8697ff311e8f5ef2d99fcbd9817b34cec66f90b6c3dfd987"
 [[package]]
 name = "typetag"
 version = "0.2.1"
+source = "git+https://github.com/jess-sol/typetag#d278beb8cddebaf61c659278584cfed7d4e4c768"
 dependencies = [
  "erased-serde",
  "inventory",
  "once_cell",
  "serde",
- "typetag-macro",
+ "typetag-impl 0.2.1 (git+https://github.com/jess-sol/typetag)",
 ]
 
 [[package]]
@@ -1304,11 +1305,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "typetag-macro"
+name = "typetag-impl"
 version = "0.2.1"
+source = "git+https://github.com/jess-sol/typetag#d278beb8cddebaf61c659278584cfed7d4e4c768"
 dependencies = [
  "proc-macro2",
- "typetag-impl",
+ "quote",
+ "syn",
 ]
 
 [[package]]
