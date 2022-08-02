@@ -40,7 +40,7 @@ pub enum StorageError {
     UnspecifiedError(#[source] Box<dyn StdError + Send + Sync>),
 }
 
-#[derive(Error, Debug, Serialize, Deserialize)]
+#[derive(Error, Clone, Debug, Serialize, Deserialize)]
 pub enum JobRunError {
     #[error("Task failure")]
     TaskFailure {
