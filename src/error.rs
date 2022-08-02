@@ -19,7 +19,7 @@ pub enum AJobQueueError {
 #[derive(Error, Debug)]
 pub enum ExecutionError {
     #[error("Failed to signal executors")]
-    SignalingError(#[source] Box<dyn StdError + Send>),
+    SignalingError(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("Failed to join executor tasks to main task")]
     JoinError(#[from] JoinError),
@@ -28,16 +28,16 @@ pub enum ExecutionError {
 #[derive(Error, Debug)]
 pub enum StorageError {
     #[error("Failed to fetch task")]
-    FetchFailure(#[source] Box<dyn StdError + Send>),
+    FetchFailure(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("Failed to create task")]
-    CreateFailure(#[source] Box<dyn StdError + Send>),
+    CreateFailure(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("Failed to create task")]
-    SerializationError(#[source] Box<dyn StdError + Send>),
+    SerializationError(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("Unspecified error")]
-    UnspecifiedError(#[source] Box<dyn StdError + Send>),
+    UnspecifiedError(#[source] Box<dyn StdError + Send + Sync>),
 }
 
 #[derive(Error, Debug, Serialize, Deserialize)]
