@@ -15,8 +15,9 @@ use crate::{
     JobType, JobTypeMarker, StorageProvider, Job,
 };
 
-use super::{JobMetadata, JobState};
+use super::{JobMetadata, JobState, JobInfo};
 
+#[derive(Clone)]
 pub struct PostgresStorageProvider<J: JobTypeMarker + ?Sized> {
     pool: Pool<Postgres>,
     _phantom_data: PhantomData<J>,
@@ -98,6 +99,19 @@ where
     ) -> Result<(), StorageError> {
         unimplemented!()
     }
+
+    async fn get_job(&self, job_id: Ulid) -> Result<JobInfo<J>, StorageError> {
+        let result = sqlx::query_as::<_, DbJob>(indoc!{"
+            SELECT *
+            FROM job_queue
+            WHERE uid = $1
+        "})
+            .bind(&Uuid::from(job_id))
+            .fetch_one(&self.pool).await
+            .map_err(|x| StorageError::FetchFailure(Box::new(x)))?;
+
+        result.into_job_info()
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -112,6 +126,23 @@ struct DbJob {
     created: DateTime<Utc>,
     started: Option<DateTime<Utc>>,
     completed: Option<DateTime<Utc>>,
+}
+
+impl DbJob {
+    fn into_job_info<J: JobTypeMarker + ?Sized>(self) -> Result<JobInfo<J>, StorageError>
+    where
+        Box<J>: DeserializeOwned,
+    {
+        let metadata = JobMetadata {
+            uid: Ulid::from(self.uid),
+            state: self.state,
+            result: self.result.map(serde_json::from_value).transpose()?,
+        };
+
+        let job: Box<J> = serde_json::from_value(self.data)?;
+
+        Ok(JobInfo { metadata, job })
+    }
 }
 
 #[cfg(test)]

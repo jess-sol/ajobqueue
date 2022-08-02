@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use ulid::Ulid;
 
-use super::{StorageProvider, JobMetadata, JobState};
+use super::{StorageProvider, JobMetadata, JobState, JobInfo};
 use crate::{
     error::{JobRunError, StorageError},
     JobTypeMarker,
@@ -61,6 +61,10 @@ where Box<J>: DeserializeOwned
         &mut self,
         _result: Result<(), JobRunError>,
     ) -> Result<(), StorageError> {
+        unimplemented!()
+    }
+
+    async fn get_job(&self, job_id: Ulid) -> Result<JobInfo<J>, StorageError> {
         unimplemented!()
     }
 }
