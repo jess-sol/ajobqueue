@@ -1,5 +1,6 @@
 use crate::JobTypeMarker;
 use crate::error::ExecutionError;
+use crate::error::StorageError;
 
 use super::Job;
 use super::StorageProvider;
@@ -7,6 +8,7 @@ use super::StorageProvider;
 use tokio::select;
 use tokio::task::JoinHandle;
 use tokio::{sync::broadcast, task};
+use tokio::time::{sleep, Duration};
 
 #[derive(Clone, Debug)]
 enum BroadcastMessage {
@@ -48,8 +50,16 @@ impl<J: JobTypeMarker + ?Sized + 'static> Executor<J>
     }
 
     async fn run(mut self) {
-        while let Ok(job) = self.storage_provider.pull().await {
-            Job::run(&*job, &self.job_type_data).await;
+        loop {
+            let result = self.storage_provider.pull().await;
+            if let Err(StorageError::Database(sqlx::Error::RowNotFound)) = result {
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+            let job_info = result.expect("Failed to fetch job");
+            Job::run(&*job_info.job, &self.job_type_data).await;
+            self.storage_provider.set_job_result(job_info.metadata.uid, Ok(())).await
+                .expect("Failed to set job result");
         }
     }
 }

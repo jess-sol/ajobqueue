@@ -13,7 +13,7 @@ pub mod storage;
 
 pub use ajobqueue_macro::*;
 pub use error::AJobQueueError;
-pub use executor::Executor;
+pub use executor::{Executor, RunningExecutor};
 pub use storage::StorageProvider;
 
 #[doc(hidden)]
