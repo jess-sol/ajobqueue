@@ -1,4 +1,4 @@
-CREATE TYPE job_state as enum ('not-started', 'running', 'finished', 'failed');
+CREATE TYPE job_state as enum ('not-started', 'running', 'completed', 'failed');
 
 CREATE TABLE job_queue (
     id INT primary key generated always as identity,
