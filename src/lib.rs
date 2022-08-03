@@ -4,7 +4,7 @@ use std::fmt::Debug;
 
 use async_trait::async_trait;
 use serde::Serialize;
-use storage::JobInfo;
+use storage::JobMetadata;
 use ulid::Ulid;
 
 mod error;
@@ -52,14 +52,12 @@ impl<J: JobTypeMarker + ?Sized> Queue<J> {
         }
     }
 
-    pub async fn push_job(&mut self, job: &J) -> Result<(), AJobQueueError> {
-        self.storage_provider.push(job).await?;
-        Ok(())
+    pub async fn push_job(&mut self, job: &J) -> Result<JobMetadata, AJobQueueError> {
+        Ok(self.storage_provider.push(job).await?)
     }
 
-    pub async fn get_job(&self, job_uid: Ulid) -> Result<JobInfo<J>, AJobQueueError> {
-        let result = self.storage_provider.get_job(job_uid).await?;
-        Ok(result)
+    pub async fn get_job(&self, job_uid: Ulid) -> Result<JobMetadata, AJobQueueError> {
+        Ok(self.storage_provider.get_job(job_uid).await?)
     }
 }
 
