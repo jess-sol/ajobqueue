@@ -124,6 +124,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_works() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
         let storage_provider = InMemoryStorageProvider::<dyn MockJobTypeMarker>::new();
         let mut queue = Queue::new(storage_provider.clone());
 

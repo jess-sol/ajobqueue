@@ -30,3 +30,7 @@ ulid = { version = "0.6.0", features = ["serde", "uuid"] }
 
 # Postgres
 sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls", "postgres", "chrono", "json", "uuid"], optional = true }
+log = "0.4.17"
+
+[dev-dependencies]
+env_logger = "0.9.0"
