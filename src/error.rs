@@ -18,26 +18,23 @@ pub enum AJobQueueError {
 
 #[derive(Error, Debug)]
 pub enum ExecutionError {
-    #[error("Failed to signal executors")]
+    #[error("Failed to signal executors: {0:?}")]
     SignalingError(#[source] Box<dyn StdError + Send + Sync>),
 
-    #[error("Failed to join executor tasks to main task")]
+    #[error("Failed to join executor tasks to main task: {0:?}")]
     JoinError(#[from] JoinError),
 }
 
 #[derive(Error, Debug)]
 pub enum StorageError {
-    #[error("Failed to fetch task")]
-    FetchFailure(#[source] Box<dyn StdError + Send + Sync>),
+    #[error(transparent)]
+    Database(#[from] sqlx::Error),
 
     #[error("Failed to create task")]
-    CreateFailure(#[source] Box<dyn StdError + Send + Sync>),
+    Serialization(#[source] Box<dyn StdError + Send + Sync>),
 
-    #[error("Failed to create task")]
-    SerializationError(#[source] Box<dyn StdError + Send + Sync>),
-
-    #[error("Unspecified error")]
-    UnspecifiedError(#[source] Box<dyn StdError + Send + Sync>),
+    #[error("Unspecified error: {0}")]
+    Unspecified(String),
 }
 
 #[derive(Error, Clone, Debug, Serialize, Deserialize)]
