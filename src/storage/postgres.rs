@@ -45,7 +45,7 @@ impl<J: JobTypeMarker + ?Sized> StorageProvider<J> for PostgresStorageProvider<J
 where
     Box<J>: DeserializeOwned,
 {
-    async fn pull(&mut self) -> Result<Box<J>, StorageError> {
+    async fn pull(&mut self) -> Result<JobInfo<J>, StorageError> {
         let now = chrono::Utc::now();
         let result = sqlx::query_as::<_, DbJob>(indoc!{"
             UPDATE job_queue
@@ -63,10 +63,9 @@ where
             .bind(now)
             .bind(JobState::Running)
             .bind(JobState::NotStarted)
-            .fetch_one(&self.pool).await
-            .map_err(|x| StorageError::FetchFailure(Box::new(x)))?;
+            .fetch_one(&self.pool).await?;
 
-        Ok(serde_json::from_value(result.data)?)
+        Ok(result.into_job_info()?)
     }
 
     async fn push(&mut self, job: &J) -> Result<JobMetadata, StorageError> {
@@ -83,8 +82,7 @@ where
                 RETURNING *
             "})
             .bind(uid).bind(job_type).bind(data).bind(created)
-            .fetch_one(&self.pool).await
-            .map_err(|x| StorageError::CreateFailure(Box::new(x)))?;
+            .fetch_one(&self.pool).await?;
 
         Ok(JobMetadata {
             uid: Ulid::from(result.uid),
@@ -95,27 +93,45 @@ where
 
     async fn set_job_result(
         &mut self,
-        _result: Result<(), JobRunError>,
-    ) -> Result<(), StorageError> {
-        unimplemented!()
+        uid: Ulid,
+        job_result: Result<(), JobRunError>,
+    ) -> Result<JobMetadata, StorageError> {
+        let job_state = if job_result.is_ok() {
+            JobState::Completed
+        } else {
+            JobState::Failed
+        };
+        let job_result = job_result.err().map(serde_json::to_value).transpose()?;
+
+        let result: DbJob = sqlx::query_as(indoc!{"
+                UPDATE job_queue
+                SET result = $1, state = $2
+                WHERE uid = $3
+                RETURNING *
+            "})
+            .bind(job_result)
+            .bind(job_state)
+            .bind(Uuid::from(uid))
+            .fetch_one(&self.pool).await?;
+
+        Ok(result.into_job_metadata()?)
     }
 
-    async fn get_job(&self, job_id: Ulid) -> Result<JobInfo<J>, StorageError> {
+    async fn get_job(&self, job_id: Ulid) -> Result<JobMetadata, StorageError> {
         let result = sqlx::query_as::<_, DbJob>(indoc!{"
             SELECT *
             FROM job_queue
             WHERE uid = $1
         "})
             .bind(&Uuid::from(job_id))
-            .fetch_one(&self.pool).await
-            .map_err(|x| StorageError::FetchFailure(Box::new(x)))?;
+            .fetch_one(&self.pool).await?;
 
-        result.into_job_info()
+        Ok(result.into_job_metadata()?)
     }
 }
 
 #[derive(sqlx::FromRow)]
-struct DbJob {
+pub struct DbJob {
     id: i32,
     uid: Uuid,
     #[sqlx(rename = "type")]
@@ -129,7 +145,7 @@ struct DbJob {
 }
 
 impl DbJob {
-    fn into_job_info<J: JobTypeMarker + ?Sized>(self) -> Result<JobInfo<J>, StorageError>
+    pub fn into_job_info<J: JobTypeMarker + ?Sized>(self) -> Result<JobInfo<J>, serde_json::Error>
     where
         Box<J>: DeserializeOwned,
     {
@@ -143,14 +159,24 @@ impl DbJob {
 
         Ok(JobInfo { metadata, job })
     }
+
+    pub fn into_job_metadata(self) -> Result<JobMetadata, serde_json::Error> {
+        Ok(JobMetadata {
+            uid: Ulid::from(self.uid),
+            state: self.state,
+            result: self.result.map(serde_json::from_value).transpose()?,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use async_trait::async_trait;
 
     use super::{PgConnectOptions, PostgresStorageProvider};
-    use crate::{job, job_type, Job, StorageProvider};
+    use crate::{job, job_type, Job, StorageProvider, storage::JobState};
 
     #[job_type]
     struct MockJobType {}
@@ -180,9 +206,9 @@ mod tests {
     }
 
     fn create_db_config() -> PgConnectOptions {
-        PgConnectOptions::new()
-            .host("127.0.0.1").database("job_queue")
-            .username("postgres").password("postgres")
+        let database_url = env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set");
+        database_url.parse().unwrap()
     }
 
     #[tokio::test]
@@ -195,7 +221,22 @@ mod tests {
         storage.push(&job1).await.unwrap();
         storage.push(&job2).await.unwrap();
 
-        assert_eq!(*storage.pull().await.unwrap().into_any().downcast::<MockJob>().unwrap(), job1);
-        assert_eq!(*storage.pull().await.unwrap().into_any().downcast::<MockJob2>().unwrap(), job2);
+        assert_eq!(*storage.pull().await.unwrap().job.into_any().downcast::<MockJob>().unwrap(), job1);
+        assert_eq!(*storage.pull().await.unwrap().job.into_any().downcast::<MockJob2>().unwrap(), job2);
+    }
+
+    #[tokio::test]
+    async fn test_set_job_status() {
+        let mut storage = PostgresStorageProvider::<dyn MockJobTypeMarker>::from_options(create_db_config()).await.unwrap();
+
+        let job = MockJob { msg: "a".to_string() };
+
+        let job_meta = storage.push(&job).await.unwrap();
+        assert_eq!(*storage.pull().await.unwrap().job.into_any().downcast::<MockJob>().unwrap(), job);
+
+        storage.set_job_result(job_meta.uid, Ok(())).await.unwrap();
+
+        let job_meta = storage.get_job(job_meta.uid).await.unwrap();
+        assert_eq!(job_meta.state, JobState::Completed);
     }
 }
