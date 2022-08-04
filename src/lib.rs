@@ -64,7 +64,7 @@ impl<J: JobTypeMarker + ?Sized> Queue<J> {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-    use tokio::sync::Mutex;
+    use tokio::{time::Duration, sync::Mutex};
     use crate::{job, job_type, storage::InMemoryStorageProvider, Executor, Job, Queue};
     use async_trait::async_trait;
 
@@ -140,10 +140,8 @@ mod tests {
             },
         );
 
-        let executor = executor.start().await;
-
-        tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
-        executor.stop().await.unwrap();
+        let mut executor = executor.start().await;
+        executor.wait_for(2, Duration::from_millis(200)).await;
 
         assert_eq!(*shared_data.lock().await, vec![
             "MSG: Hello, world!",
