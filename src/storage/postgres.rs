@@ -1,9 +1,9 @@
-use std::{marker::PhantomData, fmt::Debug};
+use std::marker::PhantomData;
 
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use sqlx::{Pool, Postgres, postgres::PgPoolOptions, types::Uuid, FromRow};
+use sqlx::{Pool, Postgres, postgres::PgPoolOptions, types::Uuid};
 use ulid::Ulid;
 use indoc::indoc;
 use chrono::{Utc, DateTime};
@@ -12,7 +12,7 @@ pub use sqlx::postgres::PgConnectOptions;
 
 use crate::{
     error::{JobRunError, StorageError},
-    JobType, JobTypeMarker, StorageProvider, Job,
+    JobType, JobTypeMarker, StorageProvider,
 };
 
 use super::{JobMetadata, JobState, JobInfo};
@@ -131,6 +131,7 @@ where
 }
 
 #[derive(sqlx::FromRow)]
+#[allow(dead_code)] // NOTE - Allow unused attributes for now
 pub struct DbJob {
     id: i32,
     uid: Uuid,
@@ -171,12 +172,10 @@ impl DbJob {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
-
     use async_trait::async_trait;
     use sqlx::{Pool, Postgres};
 
-    use super::{PgConnectOptions, PostgresStorageProvider};
+    use super::PostgresStorageProvider;
     use crate::{job, job_type, Job, StorageProvider, storage::JobState};
 
     #[job_type]

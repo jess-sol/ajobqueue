@@ -2,7 +2,6 @@ use std::{marker::PhantomData, sync::{RwLock, Arc}, collections::HashMap};
 
 use async_channel::{unbounded, Receiver, Sender};
 use async_trait::async_trait;
-use log::info;
 use serde::de::DeserializeOwned;
 use ulid::Ulid;
 
@@ -29,8 +28,8 @@ impl<J: JobTypeMarker + ?Sized> Clone for InMemoryStorageProvider<J> {
     }
 }
 
-impl<J: JobTypeMarker + ?Sized> InMemoryStorageProvider<J> {
-    pub fn new() -> Self {
+impl<J: JobTypeMarker + ?Sized> Default for InMemoryStorageProvider<J> {
+    fn default() -> Self {
         InMemoryStorageProvider {
             job_queue: unbounded(),
             jobs: Arc::new(RwLock::new(HashMap::new())),
@@ -84,7 +83,7 @@ where Box<J>: DeserializeOwned
             .map_err(|x| StorageError::Unspecified(x.to_string()))?;
 
         let mut metadata = jobs.get_mut(&uid)
-            .ok_or(StorageError::Unspecified("Uid not found".to_string()))?;
+            .ok_or_else(|| StorageError::Unspecified("Uid not found".to_string()))?;
 
         metadata.state = if job_result.is_ok() {
             JobState::Completed
@@ -100,7 +99,7 @@ where Box<J>: DeserializeOwned
         let jobs = self.jobs.read()
             .map_err(|x| StorageError::Unspecified(x.to_string()))?;
         let metadata = jobs.get(&uid)
-            .ok_or(StorageError::Unspecified(format!("Uid not found: {}", uid)))?;
+            .ok_or_else(|| StorageError::Unspecified(format!("Uid not found: {}", uid)))?;
         Ok(metadata.clone())
     }
 }

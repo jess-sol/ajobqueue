@@ -124,7 +124,7 @@ mod tests {
     async fn it_works() {
         let _ = env_logger::builder().is_test(true).try_init();
 
-        let storage_provider = InMemoryStorageProvider::<dyn MockJobTypeMarker>::new();
+        let storage_provider = InMemoryStorageProvider::<dyn MockJobTypeMarker>::default();
         let mut queue = Queue::new(storage_provider.clone());
 
         queue.push_job(&MockJob { msg: "world!".to_string() }).await.unwrap();

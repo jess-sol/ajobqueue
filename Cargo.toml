@@ -29,9 +29,8 @@ typetag = { git = "https://github.com/jess-sol/typetag", branch = "next" }
 ulid = { version = "1.0.0", features = ["serde", "uuid"] }
 
 # Postgres
-sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres", "chrono", "json", "uuid"], optional = true }
+sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres", "chrono", "json", "uuid", "migrate"], optional = true }
 log = "0.4.17"
 
 [dev-dependencies]
-sqlx = { features = ["migrate"] }
 env_logger = "0.9.0"
