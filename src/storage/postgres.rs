@@ -174,6 +174,7 @@ mod tests {
     use std::env;
 
     use async_trait::async_trait;
+    use sqlx::{Pool, Postgres};
 
     use super::{PgConnectOptions, PostgresStorageProvider};
     use crate::{job, job_type, Job, StorageProvider, storage::JobState};
@@ -205,15 +206,9 @@ mod tests {
         async fn run(&self, _: &Self::JobTypeData) {}
     }
 
-    fn create_db_config() -> PgConnectOptions {
-        let database_url = env::var("DATABASE_URL")
-            .expect("DATABASE_URL must be set");
-        database_url.parse().unwrap()
-    }
-
-    #[tokio::test]
-    async fn test_push_pull() {
-        let mut storage = PostgresStorageProvider::<dyn MockJobTypeMarker>::from_options(create_db_config()).await.unwrap();
+    #[sqlx::test]
+    async fn test_push_pull(conn: Pool<Postgres>) {
+        let mut storage = PostgresStorageProvider::<dyn MockJobTypeMarker>::new(conn);
 
         let job1 = MockJob { msg: "a".to_string() };
         let job2 = MockJob2 { msg2: "b".to_string() };
@@ -225,9 +220,9 @@ mod tests {
         assert_eq!(*storage.pull().await.unwrap().job.into_any().downcast::<MockJob2>().unwrap(), job2);
     }
 
-    #[tokio::test]
-    async fn test_set_job_status() {
-        let mut storage = PostgresStorageProvider::<dyn MockJobTypeMarker>::from_options(create_db_config()).await.unwrap();
+    #[sqlx::test]
+    async fn test_set_job_status(conn: Pool<Postgres>) {
+        let mut storage = PostgresStorageProvider::<dyn MockJobTypeMarker>::new(conn);
 
         let job = MockJob { msg: "a".to_string() };
 
