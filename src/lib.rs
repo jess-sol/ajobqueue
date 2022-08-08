@@ -141,7 +141,7 @@ mod tests {
         );
 
         let mut executor = executor.start().await;
-        executor.wait_for(2, Duration::from_millis(200)).await;
+        executor.wait_for(2, Duration::from_millis(200)).await.expect("Failed waiting for jobs to finish");
 
         assert_eq!(*shared_data.lock().await, vec![
             "MSG: Hello, world!",
