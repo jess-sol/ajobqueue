@@ -1,36 +1,30 @@
-use crate::JobTypeMarker;
 use crate::error::ExecutionError;
 use crate::error::StorageError;
+use crate::JobTypeMarker;
 
 use super::Job;
 use super::StorageProvider;
 
 use tokio::select;
 use tokio::task::JoinHandle;
-use tokio::{sync::broadcast, task};
 use tokio::time::{self, Duration};
+use tokio::{sync::broadcast, task};
 
 #[derive(Clone, Debug)]
 enum BroadcastMessage {
     Shutdown,
 }
 
-pub struct Executor<J: JobTypeMarker + ?Sized>
-{
+pub struct Executor<J: JobTypeMarker + ?Sized> {
     job_type_data: J::JobTypeData,
     storage_provider: Box<dyn StorageProvider<J>>,
 }
 
-impl<J: JobTypeMarker + ?Sized + 'static> Executor<J>
-{
+impl<J: JobTypeMarker + ?Sized + 'static> Executor<J> {
     pub fn new<S: StorageProvider<J> + 'static>(
-        storage_provider: S,
-        job_type_data: J::JobTypeData,
+        storage_provider: S, job_type_data: J::JobTypeData,
     ) -> Self {
-        Self {
-            job_type_data,
-            storage_provider: Box::new(storage_provider),
-        }
+        Self { job_type_data, storage_provider: Box::new(storage_provider) }
     }
 
     pub async fn start(self) -> RunningExecutor {
@@ -50,6 +44,7 @@ impl<J: JobTypeMarker + ?Sized + 'static> Executor<J>
             task_handle: join,
             broadcast_channel: sender,
             notifier: (notifier_sender, notifier_receiver),
+            waited_for: 0,
         }
     }
 
@@ -63,7 +58,9 @@ impl<J: JobTypeMarker + ?Sized + 'static> Executor<J>
             }
             let job_info = result.expect("Failed to fetch job");
             Job::run(&*job_info.job, &self.job_type_data).await;
-            self.storage_provider.set_job_result(job_info.metadata.uid, Ok(())).await
+            self.storage_provider
+                .set_job_result(job_info.metadata.uid, Ok(()))
+                .await
                 .expect("Failed to set job result");
 
             i += 1;
@@ -86,6 +83,7 @@ pub struct RunningExecutor {
     task_handle: JoinHandle<()>,
     broadcast_channel: broadcast::Sender<BroadcastMessage>,
     notifier: (broadcast::Sender<u32>, broadcast::Receiver<u32>),
+    waited_for: u32,
 }
 
 impl RunningExecutor {
@@ -100,7 +98,10 @@ impl RunningExecutor {
     async fn wait_for_forever(&mut self, number_of_messages: u32) -> Result<(), ()> {
         loop {
             match self.notifier.1.recv().await {
-                Ok(value) if value >= number_of_messages => return Ok(()),
+                Ok(value) if value >= self.waited_for + number_of_messages => {
+                    self.waited_for += number_of_messages;
+                    return Ok(());
+                }
                 Ok(_) => time::sleep(Duration::from_millis(10)).await,
                 Err(_) => return Err(()),
             }
@@ -111,7 +112,7 @@ impl RunningExecutor {
         match time::timeout(timeout, self.wait_for_forever(number_of_messages)).await {
             Ok(Ok(())) => Ok(()),
             Ok(Err(())) => Err(()),
-            Err(_) => Err(())
+            Err(_) => Err(()),
         }
     }
 }
