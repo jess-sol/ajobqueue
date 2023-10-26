@@ -27,7 +27,7 @@ impl<J: JobTypeMarker + ?Sized + 'static> Executor<J> {
         Self { job_type_data, storage_provider: Box::new(storage_provider) }
     }
 
-    pub async fn start(self) -> RunningExecutor {
+    pub fn start(self) -> RunningExecutor {
         let (sender, receiver) = broadcast::channel(1);
         let (notifier_sender, notifier_receiver) = broadcast::channel(10);
 
