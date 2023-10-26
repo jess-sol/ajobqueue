@@ -103,6 +103,7 @@ impl RunningExecutor {
                     return Ok(());
                 }
                 Ok(_) => time::sleep(Duration::from_millis(10)).await,
+                Err(broadcast::error::RecvError::Lagged(_)) => {}
                 Err(_) => return Err(()),
             }
         }
